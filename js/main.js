@@ -27,7 +27,7 @@ cv.addEventListener('pointermove',e=>{
   else if(d){ const [tx,ty]=screenToTile(e.clientX,e.clientY); if(tx!==d.last[0]||ty!==d.last[1]){ markLine(d.last,[tx,ty],d.on); d.last=[tx,ty]; } d.cy=e.clientY; }
   p.x=e.clientX; p.y=e.clientY;
 });
-function endPtr(e){ Input.ptrs.delete(e.pointerId); if(!Input.ptrs.size){ Input.drag=null; save(); } }
+function endPtr(e){ Input.ptrs.delete(e.pointerId); if(!Input.ptrs.size){ const d=Input.drag; Input.drag=null; recomputeConn(); if(d&&!d.pan&&d.on){ const k=I(Math.max(0,Math.min(COLS-1,d.last[0])),Math.max(0,Math.min(ROWS-1,d.last[1]))); if(G.mark[k]&&!CONN[k]&&!UI.loneTold){ UI.loneTold=1; UI.toast('Gray marks are cut off. Connect them to a tunnel or the surface.'); } } save(); } }
 cv.addEventListener('pointerup',endPtr); cv.addEventListener('pointercancel',endPtr);
 cv.addEventListener('wheel',e=>{ e.preventDefault(); if(MODE!=='game') return; cam.ty+=e.deltaY*(e.deltaMode===1?16:1)/SC*0.9; cam.tx+=e.deltaX/SC; },{passive:false});
 addEventListener('keydown',e=>{
@@ -47,7 +47,7 @@ function startGame(fresh){
   const first=!G.tut && G.found===0;
   MODE='game'; $('#title').classList.add('out'); document.body.classList.add('playing');
   wipe={t:0,m:reduced?0.35:0.8};
-  cam.ty=-VH*0.42; if(reduced) clampCam(true);
+  cam.ty=-VH*0.42; cam.tx=SHAFT*TILE+30-VW*0.5; if(reduced) clampCam(true);
   setTimeout(()=>{ $('#title').hidden=true; if(first) $('#howto').classList.add('show'); else UI.zone(W.strat[I(SHAFT,Math.max(0,G.deepest))]); }, reduced?200:700);
 }
 $('#play').addEventListener('click',()=>startGame(false));
@@ -57,7 +57,7 @@ $('#gotit').addEventListener('click',()=>{ $('#howto').classList.remove('show');
 let last=performance.now(), uiT=0, saveT=0;
 function frame(now){
   const dt=Math.min(0.05,(now-last)/1000); last=now; T+=dt;
-  if(MODE==='title'){ cam.ty=-Math.min(SKY*TILE,VH*0.45)+6+Math.sin(T*0.12)*(reduced?0:6); cam.tx=camBounds().x0+(camBounds().x1-camBounds().x0)/2; }
+  if(MODE==='title'){ cam.ty=-Math.min(SKY*TILE,VH*0.45)+6+Math.sin(T*0.12)*(reduced?0:6); const cb=camBounds(); cam.tx=cb.x0===cb.x1?cb.x0:SHAFT*TILE+40-VW/2; }
   simUpdate(dt); updateFX(dt); camUpdate(dt);
   if(MODE==='game' && Input.drag && !Input.drag.pan){ const h=innerHeight, y=Input.drag.cy; if(y<h*0.1) cam.ty-=200*dt; else if(y>h*0.9) cam.ty+=200*dt; }
   render(T, MODE);
@@ -72,7 +72,7 @@ function boot(){
   buildSheets(); buildOre(); resize();
   const had=load();
   if(!had) newGame();
-  UI.shown=G.money; UI.init();
+  recomputeConn(); UI.shown=G.money; UI.init();
   if(had){
     $('#play').textContent='CONTINUE'; $('#newg').hidden=false;
     const away=Math.min(7200,(Date.now()-(G.last||Date.now()))/1000);
@@ -97,6 +97,6 @@ function demoState(n){
   G.robots.forEach((r,i)=>{ const y=deep-2-(i%3)*Math.floor(deep/(n>1?10:5)); const x=SHAFT+1+i*2; for(let xx=SHAFT;xx<=x;xx++) G.dug[I(xx,y)]=1; r.tx=x; r.ty=y; r.x=x*TILE+6; r.y=y*TILE+TILE; r.cargo=[[n>1?6:1,1],[n>1?7:0,0]]; });
   G.deepest=deep-1; G.seen=[...new Set(STRATA.map((s,i)=>s.top<=deep?i:0))];
   G.log={coal:[9,3,1,0,0,0,0],copper:[4,2,1,1,0,0,0],iron:[2,1,0,0,1,0,0]}; G.found=25; G.best=4;
-  window.__demo=true;
+  window.__demo=true; recomputeConn();
 }
 boot();

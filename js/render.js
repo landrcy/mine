@@ -319,8 +319,8 @@ function drawMarks(cx,cy,T){
   const x0=Math.max(0,Math.floor(cx/TILE)), x1=Math.min(COLS-1,Math.floor((cx+VW)/TILE)), y0=Math.max(0,Math.floor(cy/TILE)), y1=Math.min(ROWS-1,Math.floor((cy+VH)/TILE));
   const bt=TIERS[bestTier()].dig, ph=Math.floor(T*10);
   for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){const k=I(x,y); if(!G.mark[k]||G.dug[k]) continue;
-    const dx=x*TILE-cx, dy=y*TILE-cy, bad=hardAt(k)>bt, c1=bad?'#ff3b3b':'#ffd23a';
-    ctx.fillStyle=bad?'rgba(255,40,40,0.16)':'rgba(255,210,58,0.14)'; ctx.fillRect(dx,dy,TILE,TILE);
+    const dx=x*TILE-cx, dy=y*TILE-cy, bad=hardAt(k)>bt, lone=!CONN[k], c1=bad?'#ff3b3b':lone?'#9a9080':'#ffd23a';
+    ctx.fillStyle=bad?'rgba(255,40,40,0.16)':lone?'rgba(160,150,130,0.10)':'rgba(255,210,58,0.14)'; ctx.fillRect(dx,dy,TILE,TILE);
     const up=y>0&&G.mark[k-COLS]&&!G.dug[k-COLS], dn=y<ROWS-1&&G.mark[k+COLS]&&!G.dug[k+COLS], lf=x>0&&G.mark[k-1]&&!G.dug[k-1], rt=x<COLS-1&&G.mark[k+1]&&!G.dug[k+1];
     for(let i=0;i<TILE;i++){ const on=((i+ph+x*TILE+y*TILE)%4)<2; ctx.fillStyle=on?c1:'#1a1406';
       if(!up) ctx.fillRect(dx+i,dy,1,1); if(!dn) ctx.fillRect(dx+i,dy+TILE-1,1,1); if(!lf) ctx.fillRect(dx,dy+i,1,1); if(!rt) ctx.fillRect(dx+TILE-1,dy+i,1,1); }

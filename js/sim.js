@@ -31,6 +31,13 @@ function genWorld(seed){
   for(let y=113;y<ROWS;y++)for(let x=0;x<COLS;x++){ const i=I(x,y); if(!W.ore[i]){ if(r()<0.018) W.deco[i]=1; else if(y>=188 && y<240 && r()<0.012) W.deco[i]=2; } }
 }
 const hardAt = i => STRATA[W.strat[i]].h;
+// which marks a robot could eventually reach (touch a tunnel/surface, directly or through other marks)
+const CONN=new Uint8Array(COLS*ROWS);
+function recomputeConn(){
+  CONN.fill(0); const q=[];
+  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){const k=I(x,y); if(G.mark[k]&&!G.dug[k]&&(isDug(x-1,y)||isDug(x+1,y)||isDug(x,y-1)||isDug(x,y+1))){CONN[k]=1;q.push(k);}}
+  while(q.length){const k=q.pop(), x=k%COLS, y=(k/COLS)|0; for(const [dx,dy] of DIRS){const nx=x+dx, ny=y+dy; if(nx<0||nx>=COLS||ny<0||ny>=ROWS) continue; const n=I(nx,ny); if(!CONN[n]&&G.mark[n]&&!G.dug[n]){CONN[n]=1;q.push(n);}}}
+}
 
 // ================= STATE =================
 let G = null;
@@ -46,7 +53,7 @@ function newRobot(tier, rar){
     st:'idle', path:[], job:null, prog:0, cargo:[], bat:45, face:1, vdir:null, anim:Math.random()*8, think:0, tfx:null, home:false};
 }
 function newGame(){
-  G = {v:1, seed:(Math.random()*2e9)|0, money:15, dug:new Uint8Array(COLS*ROWS), mark:new Uint8Array(COLS*ROWS), robots:[],
+  G = {v:1, seed:(Math.random()*2e9)|0, money:20, dug:new Uint8Array(COLS*ROWS), mark:new Uint8Array(COLS*ROWS), robots:[],
        up:{bay:0,luck:0,market:0,lift:0,refinery:0,auto:0,scanner:0,lights:0}, log:{}, deepest:0, seen:[0], rate:0, earned:0,
        found:0, best:-1, tut:0, nextId:1, recent:[], last:Date.now()};
   for(let y=0;y<4;y++) G.dug[I(SHAFT,y)]=1;
@@ -169,6 +176,7 @@ function completeDig(r){
     G.recent.unshift([fi,rar,y]); G.recent.length=Math.min(G.recent.length,10);
     FX.reveal(fi,rar,x,y,isNew);
   }
+  recomputeConn();
   if(y>G.deepest){ G.deepest=y; const s=W.strat[k]; if(!G.seen.includes(s)){ G.seen.push(s); UI.zone(s); } }
   r.st='idle'; r.think=0;
 }
