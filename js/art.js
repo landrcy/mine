@@ -16,69 +16,95 @@ function pnoise(S,cell,rnd){
 }
 
 const SHEET = 96; // 8x8 tiles, seamless
-const ART = {front:[], back:[], emis:[]};
-function buildSheets(){
+// ART.lod[D] holds every texture at pixel density D (D world-pixels... i.e. D canvas pixels per world pixel)
+const ART = {lod:{}};
+function genSheets(D){
+  const S=SHEET*D, out={front:[],back:[],emis:[]};
   STRATA.forEach((st,si)=>{
     const rnd=mulberry32(901+si*77);
-    const n1=pnoise(SHEET,16,rnd), n2=pnoise(SHEET,6,rnd), n3=pnoise(SHEET,32,rnd);
+    const n1=pnoise(SHEET,16,rnd), n2=pnoise(SHEET,6,rnd), n3=pnoise(SHEET,32,rnd), n4=pnoise(SHEET,2,mulberry32(33+si));
     const pal=st.pal.map(rgb);
-    const F=mk(SHEET,SHEET), B=mk(SHEET,SHEET), E=mk(SHEET,SHEET);
-    const fi=F.g.createImageData(SHEET,SHEET), bi=B.g.createImageData(SHEET,SHEET), ei=E.g.createImageData(SHEET,SHEET);
-    const put=(img,x,y,c,a)=>{const k=((y%SHEET)*SHEET+(x%SHEET))*4;img.data[k]=c[0];img.data[k+1]=c[1];img.data[k+2]=c[2];img.data[k+3]=a==null?255:a;};
-    const band=new Uint8Array(SHEET*SHEET);
-    for(let y=0;y<SHEET;y++)for(let x=0;x<SHEET;x++){
-      let v=n1(x,y)*0.6+n2(x,y)*0.3+n3(x,y)*0.25-0.08, h=hash2(x,y,si);
+    const F=mk(S,S), B=mk(S,S), E=mk(S,S);
+    const fi=F.g.createImageData(S,S), bi=B.g.createImageData(S,S), ei=E.g.createImageData(S,S);
+    const put=(img,x,y,c,a)=>{x=((x%S)+S)%S; y=((y%S)+S)%S; const k=(y*S+x)*4;img.data[k]=c[0];img.data[k+1]=c[1];img.data[k+2]=c[2];img.data[k+3]=a==null?255:a;};
+    const lw=D>1?Math.max(1,Math.round(D*0.5)):1; // line width at this density: finer when zoomed
+    const grain=Math.max(1,Math.round(D/2));
+    const band=new Uint8Array(S*S);
+    for(let Y=0;Y<S;Y++)for(let X=0;X<S;X++){
+      const x=X/D, y=Y/D, xi=Math.floor(x), yi=Math.floor(y);
+      let v=n1(x,y)*0.6+n2(x,y)*0.3+n3(x,y)*0.25-0.08+(n4(x,y)-0.5)*0.14, h=hash2(Math.floor(X/grain),Math.floor(Y/grain),si);
       switch(st.f){
         case 'soil': v+= (h<0.05?0.3:0) - (h>0.97?0.3:0); break;
         case 'clay': v=v*0.8+0.2*(0.5+0.5*Math.sin((y+n1(x,y)*14)*0.35))+(h<0.03?0.25:0); break;
-        case 'bed':  v=v*0.6+0.35*(((y+Math.floor(n3(x,y)*10))%8)<2?0:0.8) ; if(((y+Math.floor(n1(x,y)*5))%8)===0) v-=0.35; break;
-        case 'lime': v=v*0.7+0.3; if(y%24===0 || (x+(Math.floor(y/24)%2)*20)%40===0) v=0.05; if(h<0.012) v=1; break;
-        case 'shale':v=v*0.5+0.5*(((y+Math.floor(n2(x,y)*3))%3)===0?0.15:0.65); break;
+        case 'bed':  v=v*0.6+0.35*(((yi+Math.floor(n3(x,y)*10))%8)<2?0:0.8); if(((Y+Math.floor(n1(x,y)*5*D))%(8*D))<lw) v-=0.35; break;
+        case 'lime': v=v*0.7+0.3; if(Y%(24*D)<lw || (X+(Math.floor(yi/24)%2)*20*D)%(40*D)<lw) v=0.05; if(h<0.012) v=1; break;
+        case 'shale':v=v*0.5+0.5*(((Y+Math.floor(n2(x,y)*3*D))%(3*D))<lw?0.15:0.65); break;
         case 'granite': v=v*0.6+0.25; break;
-        case 'basalt': v=v*0.5+0.4; {const cx=(x+Math.floor(n3(x,y)*4))%16; if(cx===0) v=0.02; else if(cx===1) v=0.85;} if(y%32===Math.floor(n1(x,0)*6)) v=0.05; break;
+        case 'basalt': v=v*0.5+0.4; {const cx=(X+Math.floor(n3(x,y)*4*D))%(16*D); if(cx<lw) v=0.02; else if(cx<lw*2) v=0.85;} if(Y%(32*D)<lw+Math.floor(n1(x,0)*0)) v=0.05; break;
         case 'magma': v=v*0.8+0.1; break;
         case 'rift': v=v*0.6+0.15+0.3*Math.sin((x*0.3+y*0.7+n3(x,y)*9)); break;
       }
-      band[y*SHEET+x] = v<0.32?0:v<0.5?1:v<0.7?2:3;
+      band[Y*S+X] = v<0.32?0:v<0.5?1:v<0.7?2:3;
     }
-    for(let y=0;y<SHEET;y++)for(let x=0;x<SHEET;x++){
-      let c=pal[band[y*SHEET+x]].slice(); const h=hash2(x,y,si+50);
+    const front=new Uint8ClampedArray(S*S*3);
+    for(let Y=0;Y<S;Y++)for(let X=0;X<S;X++){
+      let c=pal[band[Y*S+X]].slice(); const h=hash2(Math.floor(X/grain),Math.floor(Y/grain),si+50);
       if(st.f==='granite'){ if(h<0.08)c=[146,98,92]; else if(h<0.13)c=[16,12,12]; else if(h<0.16)c=[190,180,170]; }
-      if(st.f==='soil' && h>0.985){ c=[20,14,10]; } // root specks
-      if(st.f==='rift' && h<0.006){ c=[200,160,255]; put(ei,x,y,[200,150,255],255); }
-      put(fi,x,y,c);
-      put(bi,x,y,[c[0]*0.4+2,c[1]*0.42+3,c[2]*0.5+8]); // cool, dark back wall
+      if(st.f==='soil' && h>0.985){ c=[20,14,10]; }
+      if(st.f==='rift' && h<0.006){ c=[200,160,255]; put(ei,X,Y,[200,150,255],255); }
+      put(fi,X,Y,c);
     }
-    if(st.f==='magma'){ // glowing cracks: random walks
+    const R=mulberry32(4000+si);
+    // pebbles: rounded, lit from the top-left
+    if(['soil','clay','bed','lime','shale'].includes(st.f)){
+      const n=st.f==='soil'?26:14;
+      for(let k=0;k<n;k++){ const cx=R()*S, cy=R()*S, rx=(0.8+R()*1.4)*D, ry=rx*(0.6+R()*0.3);
+        for(let y=-Math.ceil(ry)-1;y<=Math.ceil(ry)+1;y++)for(let x=-Math.ceil(rx)-1;x<=Math.ceil(rx)+1;x++){
+          const d=(x*x)/(rx*rx)+(y*y)/(ry*ry); if(d>1) continue;
+          const l=(-x/rx-y/ry); const c=l>0.7?pal[3].map(v=>v+30): l>0.1?pal[3]: l>-0.6?pal[2]:pal[1];
+          put(fi,Math.round(cx+x),Math.round(cy+y),c); }
+        if(D>1) put(fi,Math.round(cx+rx*0.2),Math.round(cy+ry+1),pal[0]); }
+    }
+    // cracks: dark line with a lit lip below (detail grows with density)
+    const nc=st.f==='magma'||st.f==='rift'?3:7;
+    for(let k=0;k<nc;k++){ let x=R()*S, y=R()*S; const L=(6+R()*10)*D; let dx=R()<0.5?1:-1;
+      for(let i=0;i<L;i++){ put(fi,Math.round(x),Math.round(y),pal[0].map(v=>v*0.6)); if(D>1) put(fi,Math.round(x),Math.round(y)+1,pal[3]);
+        if(D>2&&R()<0.15){ let bx=x,by=y; for(let j=0;j<D*2;j++){ bx+=dx; by+=R()<0.5?1:0; put(fi,Math.round(bx),Math.round(by),pal[0]); } }
+        x+=R()<0.6?dx:0; y+=R()<0.7?1:0; if(R()<0.08) dx=-dx; } }
+    if(st.f==='magma'){ // glowing cracks, with a white-hot core when zoomed
       const r2=mulberry32(77);
       for(let k=0;k<4;k++){let x=Math.floor(r2()*SHEET),y=Math.floor(r2()*SHEET);
-        for(let s=0;s<70;s++){const t=s<6||s>62?0:s<16||s>50?1:2;
+        for(let s2=0;s2<70;s2++){const t=s2<6||s2>62?0:s2<16||s2>50?1:2;
           const cc=[[120,24,6],[220,70,10],[255,170,40]][t];
-          put(fi,(x+SHEET)%SHEET,(y+SHEET)%SHEET,cc); put(ei,(x+SHEET)%SHEET,(y+SHEET)%SHEET,cc,255);
+          for(let yy=0;yy<D;yy++)for(let xx=0;xx<D;xx++){ const core=D>1&&t>0&&yy===(D>>1); const c2=core?[255,236,170]:cc; put(fi,x*D+xx,y*D+yy,c2); put(ei,x*D+xx,y*D+yy,c2,255); }
           if(r2()<0.7) x+=1; else y+=r2()<0.5?1:-1;}}
     }
-    if(st.f==='lime'){ // little shell fossils
+    if(st.f==='lime'){ // little shell fossils, ribbed when zoomed
       const r2=mulberry32(55);
       for(let k=0;k<10;k++){const x=Math.floor(r2()*(SHEET-4)),y=Math.floor(r2()*(SHEET-3));
-        [[1,0],[2,0],[0,1],[3,1],[1,2],[2,2],[1,1]].forEach(([a,b],i)=>put(fi,x+a,y+b,i<6?[196,190,166]:[90,86,74]));}
+        [[1,0],[2,0],[0,1],[3,1],[1,2],[2,2],[1,1]].forEach(([a,b],i)=>{ for(let yy=0;yy<D;yy++)for(let xx=0;xx<D;xx++) put(fi,(x+a)*D+xx,(y+b)*D+yy,i<6?((D>1&&(xx===0))?[150,144,124]:[196,190,166]):[90,86,74]); });}
     }
+    // back wall = darker, cooler copy; zoomed-in walls show pick/drill scoring
+    for(let i=0;i<S*S;i++){ const k=i*4; bi.data[k]=fi.data[k]*0.4+2; bi.data[k+1]=fi.data[k+1]*0.42+3; bi.data[k+2]=fi.data[k+2]*0.5+8; bi.data[k+3]=255; }
+    if(D>1){ for(let k=0;k<40;k++){ let x=R()*S, y=R()*S; for(let i=0;i<D*3;i++){ const q=((Math.round(y)%S+S)%S*S+((Math.round(x)%S)+S)%S)*4; bi.data[q]+=14; bi.data[q+1]+=14; bi.data[q+2]+=16; x+=1; y+=R()<0.5?1:0; } } }
     F.g.putImageData(fi,0,0); B.g.putImageData(bi,0,0); E.g.putImageData(ei,0,0);
-    ART.front.push(F.c); ART.back.push(B.c); ART.emis.push(E.c);
+    out.front.push(F.c); out.back.push(B.c); out.emis.push(E.c);
   });
+  return out;
 }
-
+function buildSheets(){ lod(1); }
 // ---------- ore overlay tiles (per find, 4 variants) ----------
-ART.ore = [];
-function buildOre(){
+function genOre(){
+  const all=[];
   FINDS.forEach((o,oi)=>{
     const vs=[];
     for(let v=0;v<4;v++){
       const s=mk(TILE,TILE), r=mulberry32(300+oi*13+v), C=o.col;
-      if(o.relic && o.id==='fossil'){ // ammonite spiral
+      if(o.relic && o.id==='fossil'){
         const pts=[[3,3],[4,3],[5,3],[6,3],[7,4],[8,5],[8,6],[8,7],[7,8],[6,8],[5,8],[4,7],[3,6],[3,5],[4,5],[5,5],[6,6],[5,6]];
         pts.forEach(([x,y],i)=>{s.g.fillStyle=i<4?C[3]:i<12?C[2]:C[1];s.g.fillRect(x+(v%2),y,1,1);});
         s.g.fillStyle=C[0];s.g.fillRect(4+(v%2),6,1,1);
-      } else if(o.relic){ // old gear
+      } else if(o.relic){
         const cx=6,cy=6;for(let y=0;y<TILE;y++)for(let x=0;x<TILE;x++){const d=Math.hypot(x-cx+.5,y-cy+.5),a=Math.atan2(y-cy,x-cx);
           const tooth=Math.cos(a*8)>0.3?1:0; if(d<3.4+tooth*1.4&&d>1.6){s.g.fillStyle=y<cy-1?C[3]:y<cy+2?C[2]:C[1];s.g.fillRect(x,y,1,1);}}
         s.g.fillStyle=C[0];s.g.fillRect(cx,cy,1,1);
@@ -89,15 +115,16 @@ function buildOre(){
           for(let y=0;y<bh;y++)for(let x=0;x<bw;x++){
             if((x===0||x===bw-1)&&(y===0||y===bh-1)&&r()<0.6)continue;
             s.g.fillStyle = y===0?C[2]: y===bh-1?C[0]:C[1]; s.g.fillRect(bx+x,by+y,1,1);}
-          s.g.fillStyle=C[3]; s.g.fillRect(bx,by,1,1);
+          s.g.fillStyle=C[3]; s.g.fillRect(bx,by,1,1); if(bw>2){ s.g.fillStyle=C[2]; s.g.fillRect(bx+bw-1,by+bh-2,1,1); }
         }
       }
       vs.push(s.c);
     }
-    ART.ore.push(vs);
+    all.push(vs);
   });
+  return all;
 }
-
+function buildOre(){}
 // ---------- 5x7 pixel font ----------
 const FONT = {
 A:'01110100011000111111100011000110001',B:'11110100011000111110100011000111110',C:'01111100001000010000100001000001111',

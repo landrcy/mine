@@ -4,38 +4,52 @@ let reduced=RMQ.matches; RMQ.addEventListener&&RMQ.addEventListener('change',e=>
 let MODE='title', T=0, wipe=null;
 const Input={tool:'dig', ptrs:new Map(), drag:null};
 
-function screenToTile(cx,cy){ const r=cv.getBoundingClientRect(); const x=(cx-r.left)/SC+cam.x, y=(cy-r.top)/SC+cam.y; return [Math.floor(x/TILE),Math.floor(y/TILE),x,y]; }
+function screenToTile(cx,cy){ const r=cv.getBoundingClientRect(), Z=ZOOM.z; const x=(cx-r.left)/SC/Z+cam.x, y=(cy-r.top)/SC/Z+cam.y; return [Math.floor(x/TILE),Math.floor(y/TILE),x,y]; }
 function markLine(a,b,on){ let [x0,y0]=a; const [x1,y1]=b; const dx=Math.abs(x1-x0), dy=-Math.abs(y1-y0), sx=x0<x1?1:-1, sy=y0<y1?1:-1; let e=dx+dy;
   for(;;){ setMark(x0,y0,on); if(x0===x1&&y0===y1) break; const e2=2*e; if(e2>=dy){e+=dy;x0+=sx;} else if(e2<=dx){e+=dx;y0+=sy;} } }
-function setMark(x,y,on){ if(x<0||x>=COLS||y<0||y>=ROWS) return; const k=I(x,y); if(G.dug[k]) return; G.mark[k]=on?1:0; if(on&&!G.tut){ G.tut=1; } }
+function setMark(x,y,on){ if(x<0||x>=COLS||y<0||y>=ROWS) return; const k=I(x,y); if(G.dug[k]) return; const d=Input.drag; if(d&&d.hist&&!d.hist.has(k)) d.hist.set(k,G.mark[k]); G.mark[k]=on?1:0; if(on&&!G.tut){ G.tut=1; } }
 function robotAt(wx,wy){ return G.robots.find(r=>Math.abs(r.x-wx)<8&&wy<r.y+2&&wy>r.y-16-(r.tier>=4?10:0)); }
 
 cv.addEventListener('contextmenu',e=>e.preventDefault());
 cv.addEventListener('pointerdown',e=>{
   if(MODE!=='game') return; cv.setPointerCapture(e.pointerId);
   Input.ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if(Input.ptrs.size>=2 || e.button===1 || e.button===2 || Input.tool==='pan'){ Input.drag={pan:true,x:e.clientX,y:e.clientY}; return; }
+  if(Input.ptrs.size>=2){ const d=Input.drag; if(d&&!d.pan&&d.hist) d.hist.forEach((v,k)=>G.mark[k]=v); // second finger: undo the marks the first finger just drew
+    Input.drag={pan:true,x:e.clientX,y:e.clientY,pinch:pinchDist()}; return; }
+  if( e.button===1 || e.button===2 || Input.tool==='pan'){ Input.drag={pan:true,x:e.clientX,y:e.clientY}; return; }
   const [tx,ty,wx,wy]=screenToTile(e.clientX,e.clientY);
   const r=robotAt(wx,wy); if(r){ UI.sel=r.id; if(UI.open!=='robots') UI.toggle('robots'); else UI.render(); Input.drag=null; return; }
   if(ty<0){ Input.drag={pan:true,x:e.clientX,y:e.clientY}; return; }
-  const on=!(tx>=0&&tx<COLS&&G.mark[I(tx,ty)]); Input.drag={pan:false,on,last:[tx,ty],sx:e.clientX,sy:e.clientY,cy:e.clientY};
+  const on=!(tx>=0&&tx<COLS&&G.mark[I(tx,ty)]); Input.drag={pan:false,on,last:[tx,ty],sx:e.clientX,sy:e.clientY,cy:e.clientY,hist:new Map()};
   setMark(tx,ty,on);
 });
 cv.addEventListener('pointermove',e=>{
   const p=Input.ptrs.get(e.pointerId); if(!p) return; const d=Input.drag;
-  if(d&&d.pan){ const n=Input.ptrs.size; cam.tx-=(e.clientX-p.x)/SC/n; cam.ty-=(e.clientY-p.y)/SC/n; cam.x=cam.tx; cam.y=cam.ty; clampCam(false); }
+  if(d&&d.pan){ const n=Input.ptrs.size, Z=ZOOM.z; cam.tx-=(e.clientX-p.x)/SC/Z/n; cam.ty-=(e.clientY-p.y)/SC/Z/n; cam.x=cam.tx; cam.y=cam.ty; clampCam(false);
+    if(n>=2&&d.pinch){ p.x=e.clientX; p.y=e.clientY; const q=pinchDist()/d.pinch, m=pinchMid();
+      if(q>1.4){ if(zoomAt(ZOOM.t+1,m[0],m[1])) d.pinch=pinchDist(); else d.pinch=pinchDist(); }
+      else if(q<0.7){ zoomAt(ZOOM.t-1,m[0],m[1]); d.pinch=pinchDist(); } } }
   else if(d){ const [tx,ty]=screenToTile(e.clientX,e.clientY); if(tx!==d.last[0]||ty!==d.last[1]){ markLine(d.last,[tx,ty],d.on); d.last=[tx,ty]; } d.cy=e.clientY; }
   p.x=e.clientX; p.y=e.clientY;
 });
 function endPtr(e){ Input.ptrs.delete(e.pointerId); if(!Input.ptrs.size){ const d=Input.drag; Input.drag=null; recomputeConn(); if(d&&!d.pan&&d.on){ const k=I(Math.max(0,Math.min(COLS-1,d.last[0])),Math.max(0,Math.min(ROWS-1,d.last[1]))); if(G.mark[k]&&!CONN[k]&&!UI.loneTold){ UI.loneTold=1; UI.toast('Gray marks are cut off. Connect them to a tunnel or the surface.'); } } save(); } }
 cv.addEventListener('pointerup',endPtr); cv.addEventListener('pointercancel',endPtr);
-cv.addEventListener('wheel',e=>{ e.preventDefault(); if(MODE!=='game') return; cam.ty+=e.deltaY*(e.deltaMode===1?16:1)/SC*0.9; cam.tx+=e.deltaX/SC; },{passive:false});
+// wheel pans (like scrolling a page); ctrl/cmd + wheel or a trackpad pinch zooms around the cursor
+let wheelZ=0, wheelZT=0;
+cv.addEventListener('wheel',e=>{ e.preventDefault(); if(MODE!=='game') return; const m=e.deltaMode===1?16:1;
+  if(e.ctrlKey||e.metaKey){ const now=performance.now(); if(now-wheelZT>300) wheelZ=0; wheelZT=now; wheelZ+=e.deltaY*m;
+    if(Math.abs(wheelZ)>=40){ zoomAt(ZOOM.t+(wheelZ<0?1:-1),e.clientX,e.clientY); wheelZ=0; } return; }
+  cam.ty+=e.deltaY*m/SC/ZOOM.z*0.9; cam.tx+=e.deltaX*m/SC/ZOOM.z; },{passive:false});
+function pinchDist(){ const a=[...Input.ptrs.values()]; return a.length<2?0:Math.max(1,Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)); }
+function pinchMid(){ const a=[...Input.ptrs.values()]; return [(a[0].x+a[1].x)/2,(a[0].y+a[1].y)/2]; }
+function zoomAt(t,clientX,clientY){ const r=cv.getBoundingClientRect(); const ok=clientX==null?zoomTo(t):zoomTo(t,(clientX-r.left)/SC,(clientY-r.top)/SC); if(ok) UI.zoomLbl(); return ok; }
 addEventListener('keydown',e=>{
   if(MODE!=='game') return;
   if(e.key==='Escape') UI.close();
-  const s=e.shiftKey?120:40;
+  const s=(e.shiftKey?120:40)/ZOOM.z;
   if(e.key==='ArrowDown'||e.key==='s') cam.ty+=s; if(e.key==='ArrowUp'||e.key==='w') cam.ty-=s;
   if(e.key==='ArrowLeft'||e.key==='a') cam.tx-=s; if(e.key==='ArrowRight'||e.key==='d') cam.tx+=s;
+  if(e.key==='+'||e.key==='='){ e.preventDefault(); zoomAt(ZOOM.t+1); } if(e.key==='-'||e.key==='_'){ e.preventDefault(); zoomAt(ZOOM.t-1); }
   if(e.key===' '){ e.preventDefault(); UI.setTool(Input.tool==='dig'?'pan':'dig'); }
 });
 addEventListener('resize',resize);
@@ -47,7 +61,7 @@ function startGame(fresh){
   const first=!G.tut && G.found===0;
   MODE='game'; $('#title').classList.add('out'); document.body.classList.add('playing');
   wipe={t:0,m:reduced?0.35:0.8};
-  cam.ty=-VH*0.42; cam.tx=SHAFT*TILE+30-VW*0.5; if(reduced) clampCam(true);
+  cam.ty=-viewH()*0.42; cam.tx=SHAFT*TILE+30-viewW()*0.5; if(reduced) clampCam(true);
   setTimeout(()=>{ $('#title').hidden=true; if(first) $('#howto').classList.add('show'); else UI.zone(W.strat[I(SHAFT,Math.max(0,G.deepest))]); }, reduced?200:700);
 }
 $('#play').addEventListener('click',()=>startGame(false));
@@ -59,7 +73,7 @@ function frame(now){
   const dt=Math.min(0.05,(now-last)/1000); last=now; T+=dt;
   if(MODE==='title'){ cam.ty=-Math.min(SKY*TILE,VH*0.45)+6+Math.sin(T*0.12)*(reduced?0:6); const cb=camBounds(); cam.tx=cb.x0===cb.x1?cb.x0:SHAFT*TILE+40-VW/2; }
   simUpdate(dt); updateFX(dt); camUpdate(dt);
-  if(MODE==='game' && Input.drag && !Input.drag.pan){ const h=innerHeight, y=Input.drag.cy; if(y<h*0.1) cam.ty-=200*dt; else if(y>h*0.9) cam.ty+=200*dt; }
+  if(MODE==='game' && Input.drag && !Input.drag.pan){ const h=innerHeight, y=Input.drag.cy; if(y<h*0.1) cam.ty-=200*dt/ZOOM.z; else if(y>h*0.9) cam.ty+=200*dt/ZOOM.z; }
   render(T, MODE);
   if(wipe){ wipe.t+=dt; const q=wipe.t/wipe.m; if(q>=1) wipe=null; else {
     if(reduced){ ctx.globalAlpha=1-q; ctx.fillStyle='#000'; ctx.fillRect(0,0,VW,VH); ctx.globalAlpha=1; }
@@ -69,7 +83,7 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 function boot(){
-  buildSheets(); buildOre(); resize();
+  buildSheets(); resize();
   const had=load();
   if(!had) newGame();
   recomputeConn(); UI.shown=G.money; UI.init();
@@ -81,6 +95,8 @@ function boot(){
   // debug/screenshot hooks (no effect on normal play)
   const q=new URLSearchParams(location.search);
   if(q.has('demo')) demoState(+q.get('demo')||1);
+  // build the zoomed art sets in idle time so the first zoom never hitches
+  const idle=window.requestIdleCallback||(f=>setTimeout(f,200)); [2,3,4].forEach((D,i)=>setTimeout(()=>idle(()=>lod(D)),1500+i*1200));
   requestAnimationFrame(frame);
 }
 function demoState(n){

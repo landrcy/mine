@@ -10,8 +10,12 @@ const UI = {
     $('#panels').addEventListener('click',UI.click);
     $('#tool').addEventListener('click',()=>UI.setTool(Input.tool==='dig'?'pan':'dig'));
     $('#btop').addEventListener('click',()=>{cam.ty=-SKY*TILE*0.55; flashBtn('#btop');});
-    $('#bdeep').addEventListener('click',()=>{cam.ty=G.deepest*TILE-VH*0.5; flashBtn('#bdeep');});
+    $('#zin').addEventListener('click',()=>{ zoomAt(ZOOM.t+1); flashBtn('#zin'); });
+    $('#zout').addEventListener('click',()=>{ zoomAt(ZOOM.t-1); flashBtn('#zout'); });
+    UI.zoomLbl();
+    $('#bdeep').addEventListener('click',()=>{cam.ty=G.deepest*TILE-viewH()*0.5; flashBtn('#bdeep');});
   },
+  zoomLbl(){ $('#zlvl').textContent=ZOOM.t+'X'; $('#zin').disabled=ZOOM.t>=ZOOM.MAX; $('#zout').disabled=ZOOM.t<=ZOOM.MIN; },
   setTool(t){ Input.tool=t; const b=$('#tool'); b.textContent=t==='dig'?'DIG':'PAN'; b.classList.toggle('pan',t==='pan'); flashBtn('#tool'); },
   toggle(name){
     if(UI.open===name){ UI.close(); return; }
@@ -21,6 +25,7 @@ const UI = {
   },
   close(){ UI.open=null; document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on')); document.querySelectorAll('[data-panel]').forEach(b=>b.classList.remove('act')); },
   render(){ if(!UI.open) return; ({robots:UI.rRobots,base:UI.rBase,log:UI.rLog,odds:UI.rOdds})[UI.open](); UI.tick(true); },
+  closeBtn(n){ const hd=document.querySelector('#p-'+n+' header'); if(hd&&!hd.querySelector('.x')) hd.insertAdjacentHTML('beforeend','<button class="x" data-act="close" aria-label="Close panel">&times;</button>'); },
   rRobots(){
     const sel=G.robots.find(r=>r.id===UI.sel)||G.robots[0]; UI.sel=sel.id; const n=G.robots.length, full=n>=slots(), c=robotCost(n+1);
     let h=`<header><h2>ROBOTS</h2><span>${n}/${slots()} BAY</span></header>
@@ -37,14 +42,14 @@ const UI = {
       h+=`<div class="tierup"><canvas class="port big" width="40" height="34" data-port="next"></canvas><div><small>TRANSFORM TO TIER ${ROMAN[sel.tier+1]}</small><b>${t.n}</b><small>${t.d} Digs hardness ${t.dig} (${STRATA.filter(s=>s.h===t.dig).map(s=>s.name).join(', ')}).</small></div>
       <button class="buy tier" data-act="tier" data-cost="${t.cost}">${fmt(t.cost)}</button></div>`; }
     else h+=`<div class="tierup max"><b>FINAL FORM</b><small>Nothing left to become.</small></div>`;
-    $('#p-robots').innerHTML=h+'</div>';
+    $('#p-robots').innerHTML=h+'</div>'; UI.closeBtn('robots');
   },
   rBase(){
     let h=`<header><h2>BASE</h2><span>PLAYER-WIDE</span></header><p class="hint">These upgrade the whole operation, not one robot.</p>`;
     Object.keys(GUPG).forEach(k=>{const u=GUPG[k], L=G.up[k], mx=L>=u.max;
       h+=`<div class="row"><div><b>${u.n}</b> <span class="pips">${'▮'.repeat(L)}<s>${'▮'.repeat(Math.min(u.max,20)-L)}</s></span><small>${u.d(L)}${mx?'':' → '+u.d(L+1)}</small></div>
       <button class="buy" data-act="gup" data-k="${k}" ${mx?'disabled':''} data-cost="${mx?'':u.cost(L)}">${mx?'MAX':fmt(u.cost(L))}</button></div>`;});
-    $('#p-base').innerHTML=h;
+    $('#p-base').innerHTML=h; UI.closeBtn('base');
   },
   rLog(){
     const anySing=FINDS.some(f=>(G.log[f.id]||[])[6]>0);
@@ -55,7 +60,7 @@ const UI = {
     FINDS.forEach((f,fi)=>{const L=G.log[f.id], known=!!L;
       h+=`<tr class="${known?'':'unk'}"><td><img src="${icon(fi,null)}" alt=""><span>${known?f.name:'???'}</span><small>${known?f.top*M_PER_ROW+'m+':''}</small></td>${RAR.map((r,i)=>`<td style="--c:${r.c}" class="${L&&L[i]?'got':''}">${L&&L[i]?L[i]:'·'}</td>`).join('')}</tr>`;});
     h+='</table><h3>RECENT</h3><div class="recent">'+(G.recent.length?G.recent.map(([fi,r,y])=>`<div style="--c:${RAR[r].c}"><img src="${icon(fi,r)}" alt=""><b>${RAR[r].n}</b> ${FINDS[fi].name}<small>${y*M_PER_ROW}m</small></div>`).join(''):'<p class="hint">Nothing yet. Mark some tunnels.</p>')+'</div>';
-    $('#p-log').innerHTML=h;
+    $('#p-log').innerHTML=h; UI.closeBtn('log');
   },
   rOdds(){
     const L=luck(), d=G.deepest, o=rarityOdds(d,L), si=W.strat[I(Math.min(COLS-1,SHAFT),Math.max(0,d))], anySing=FINDS.some(f=>(G.log[f.id]||[])[6]>0);
@@ -66,16 +71,17 @@ const UI = {
     h+=`</div><h3>BY LAYER (top of each layer, your luck)</h3><table class="ot"><tr><th>LAYER</th>${RAR.map((r,i)=>`<th style="color:${r.c}">${i===6&&!anySing?'?':r.n.slice(0,3)}</th>`).join('')}</tr>`;
     STRATA.forEach(s=>{const p=rarityOdds(s.top,L); h+=`<tr><td>${s.name}</td>${p.map(x=>`<td>${pct(x)}</td>`).join('')}</tr>`;});
     h+=`</table><h3>ROBOT BUILD ROLL (surface odds)</h3><p class="hint">${rarityOdds(0,L).map((x,i)=>`<span style="color:${RAR[i].c}">${i===6&&!anySing?'???':RAR[i].n} ${pct(x)} (x${BUILD_MULT[i]})</span>`).join(' · ')}</p>`;
-    $('#p-odds').innerHTML=h;
+    $('#p-odds').innerHTML=h; UI.closeBtn('odds');
   },
   click(e){
     const b=e.target.closest('[data-act]'); if(!b||b.disabled) return; const a=b.dataset.act, sel=G.robots.find(r=>r.id===UI.sel);
     let ok=false;
-    if(a==='sel'){ UI.sel=+b.dataset.id; const r=G.robots.find(q=>q.id===UI.sel); if(r) cam.ty=r.y-VH*0.55, cam.tx=r.x-VW/2; UI.rRobots(); UI.tick(true); return; }
+    if(a==='close'){ UI.close(); return; }
+    if(a==='sel'){ UI.sel=+b.dataset.id; const r=G.robots.find(q=>q.id===UI.sel); if(r) cam.ty=r.y-viewH()*0.55, cam.tx=r.x-viewW()/2; UI.rRobots(); UI.tick(true); return; }
     if(a==='build'){ const r=buyRobot(); if(r){ ok=true; UI.sel=r.id; UI.toast(`Robot #${r.id} built: <b style="color:${RAR[r.rar].c}">${RAR[r.rar].n}</b> quality (x${BUILD_MULT[r.rar]})`); if(r.rar>=1) RG.push({x:r.x,y:r.y-8,t:0,m:0.8,c:RAR[r.rar].c,R:20+r.rar*6}); } }
-    if(a==='rup'&&sel) ok=buyRobotUp(sel,b.dataset.k);
-    if(a==='tier'&&sel){ ok=buyTier(sel); if(ok){ cam.tx=sel.x-VW/2; cam.ty=sel.y-VH*0.55; UI.tierBanner(sel); } }
-    if(a==='gup') ok=buyGlobal(b.dataset.k);
+    if(a==='rup'&&sel){ ok=buyRobotUp(sel,b.dataset.k); if(ok) sel._farTold=0; }
+    if(a==='tier'&&sel){ ok=buyTier(sel); if(ok){ cam.tx=sel.x-viewW()/2; cam.ty=sel.y-viewH()*0.55; UI.tierBanner(sel); } }
+    if(a==='gup'){ ok=buyGlobal(b.dataset.k); if(ok) G.robots.forEach(r=>r._farTold=0); }
     if(ok){ save(); UI.render(); const nb=document.querySelector(`[data-act="${a}"]${b.dataset.k?`[data-k="${b.dataset.k}"]`:''}`); if(nb) pop(nb); UI.coins(b); }
     else { b.classList.remove('deny'); void b.offsetWidth; b.classList.add('deny'); }
   },
@@ -84,7 +90,7 @@ const UI = {
     // money ticks toward the real value
     const m=$('#money'); UI.shown += (G.money-UI.shown)*(reduced?1:0.18); if(Math.abs(G.money-UI.shown)<1) UI.shown=G.money; m.textContent=fmt(UI.shown);
     $('#depth').textContent=G.deepest*M_PER_ROW+'m';
-    const cs=W.strat[I(0,Math.max(0,Math.min(ROWS-1,Math.floor((cam.y+VH/2)/TILE))))]; const zl=$('#layer'), zn=(cam.y+VH/2)<0?'SURFACE':STRATA[cs].name;
+    const cs=W.strat[I(0,Math.max(0,Math.min(ROWS-1,Math.floor((cam.y+viewH()/2)/TILE))))]; const zl=$('#layer'), zn=(cam.y+viewH()/2)<0?'SURFACE':STRATA[cs].name;
     if(zl.textContent!==zn){ zl.textContent=zn; pop(zl); }
     $('#bots').textContent=G.robots.length+'/'+slots(); $('#luck').textContent='+'+luck().toFixed(1);
     document.querySelectorAll('#panels [data-cost]').forEach(b=>{ const c=+b.dataset.cost; if(b.dataset.cost!=='') b.classList.toggle('no',G.money<c); });

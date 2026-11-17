@@ -66,9 +66,9 @@ const TIERS = [
   {n:'RUST DIGGER',       d:'Rusty tread digger. Patched plates, one lamp.',            dig:2, spd:1,   mv:1.0,  cost:0},
   {n:'HYDRAULIC DRILLER', d:'Armored hull, piston-driven spiral drill.',               dig:3, spd:1.8, mv:1.15, cost:600},
   {n:'LASER CUTTER',      d:'Four legs, three arms, cutting lasers.',                   dig:4, spd:3,   mv:1.35, cost:6000},
-  {n:'PLASMA BORER',      d:'Hovers on thrusters, melts rock with a plasma lance.',     dig:5, spd:5,   mv:1.6,  cost:50000},
-  {n:'EXCAVATOR TITAN',   d:'A walking bucket-wheel excavator too big for its tunnels.',dig:6, spd:8.5, mv:1.8,  cost:400000},
-  {n:'VOID DRILL',        d:'Tears holes in reality. Rock just stops existing.',        dig:7, spd:15,  mv:2.2,  cost:3500000},
+  {n:'PLASMA BORER',      d:'Hovers on thrusters, melts rock with a plasma lance.',     dig:5, spd:5,   mv:1.6,  cost:30000},
+  {n:'EXCAVATOR TITAN',   d:'A walking bucket-wheel excavator too big for its tunnels.',dig:6, spd:8.5, mv:1.8,  cost:200000},
+  {n:'VOID DRILL',        d:'Tears holes in reality. Rock just stops existing.',        dig:7, spd:15,  mv:2.2,  cost:1200000},
 ];
 const ROMAN = ['I','II','III','IV','V','VI'];
 

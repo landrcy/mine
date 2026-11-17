@@ -9,7 +9,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 8 8%22 shape-rendering=%22crispEdges%22%3E%3Crect width=%228%22 height=%228%22 fill=%22%2307060a%22/%3E%3Crect x=%221%22 y=%222%22 width=%226%22 height=%224%22 fill=%22%23a8653a%22/%3E%3Crect x=%225%22 y=%223%22 width=%223%22 height=%222%22 fill=%22%23ffd23a%22/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=2">
+<link rel="stylesheet" href="css/style.css?v=3">
 </head>
 <body>
 <canvas id="cv"></canvas>
@@ -26,6 +26,8 @@
   <button id="tool" title="Dig or pan (space)">DIG</button>
   <button id="btop" title="Jump to surface">&#9650;</button>
   <button id="bdeep" title="Jump to deepest point">&#9660;</button>
+  <span class="sep"></span>
+  <button id="zout" class="zb" title="Zoom out (-)" aria-label="Zoom out">&minus;</button><span id="zlvl">1X</span><button id="zin" class="zb" title="Zoom in (+)" aria-label="Zoom in">+</button>
   <span class="sep"></span>
   <button data-panel="robots">ROBOTS</button>
   <button data-panel="base">BASE</button>
@@ -54,19 +56,21 @@
   <h2>HOW TO PLAY</h2>
   <ol>
     <li><b>Tap or drag</b> across rock to mark tunnels, starting from the shaft or the surface. Tap a mark again to clear it.</li>
-    <li>Your robots dig the marks, fill their hoppers with ore, then haul it up the shaft and sell it.</li>
+    <li>Your robots dig the marks, fill their hoppers with ore, then haul it up the shaft and sell it. Plain rock sells as scrap for a little.</li>
     <li>Every find rolls a <b class="rr">rarity</b>. Deeper rock rolls better.</li>
     <li><b>ROBOTS</b> upgrades one machine (and transforms it). <b>BASE</b> upgrades everything.</li>
     <li>Look around: <b>PAN</b> tool, two fingers, right-drag, or the mouse wheel.</li>
+    <li><b>Zoom</b> for a closer look: pinch, <b>+</b>/<b>&minus;</b> buttons or keys, or ctrl + wheel.</li>
   </ol>
   <button id="gotit">START DIGGING</button>
 </div></div>
 
-<script src="js/data.js?v=2"></script>
-<script src="js/art.js?v=2"></script>
-<script src="js/sim.js?v=2"></script>
-<script src="js/render.js?v=2"></script>
-<script src="js/ui.js?v=2"></script>
-<script src="js/main.js?v=2"></script>
+<script src="js/data.js?v=3"></script>
+<script src="js/art.js?v=3"></script>
+<script src="js/lod.js?v=3"></script>
+<script src="js/sim.js?v=3"></script>
+<script src="js/render.js?v=3"></script>
+<script src="js/ui.js?v=3"></script>
+<script src="js/main.js?v=3"></script>
 </body>
 </html>
