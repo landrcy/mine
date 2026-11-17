@@ -51,6 +51,12 @@ function recomputeConn(){
 let G = null;
 const reserved = new Map();
 const isDug=(x,y)=> y===-1 ? (x>=0&&x<COLS) : (x>=0&&x<COLS&&y>=0&&y<ROWS&&G.dug[I(x,y)]===1);
+// ---- ground support: robots need a floor, the shaft lift, or a ladder; otherwise they fall ----
+const isLad=(x,y)=> y>=0&&y<ROWS&&x>=0&&x<COLS&&G.lad&&G.lad[I(x,y)]===1;
+// a lone vertical tunnel gets a ladder drawn in it (render.js uses the same rule)
+const geoLad=(x,y)=> isDug(x,y)&&y>=0&&x!==SHAFT&&(isDug(x,y-1)||isDug(x,y+1))&&!isDug(x-1,y)&&!isDug(x+1,y);
+const climbable=(x,y)=> y>=0 && isDug(x,y) && (x===SHAFT || isLad(x,y) || geoLad(x,y));
+const standable=(x,y)=> y===-1 || y>=ROWS-1 || !isDug(x,y+1) || climbable(x,y);
 const luck = ()=> 0.1*G.up.luck+(G.xluck||0); // xluck = admin luck slider
 const slots = ()=> 2+G.up.bay;
 const sellMult = ()=> (1+0.12*G.up.market)*(1+0.2*G.up.refinery);
@@ -61,7 +67,7 @@ function newRobot(tier, rar){
     st:'idle', path:[], job:null, prog:0, cargo:[], bat:45, face:1, vdir:null, anim:Math.random()*8, think:0, tfx:null, home:false};
 }
 function newGame(){
-  G = {v:1, seed:(Math.random()*2e9)|0, money:20, dug:new Uint8Array(COLS*ROWS), mark:new Uint8Array(COLS*ROWS), robots:[],
+  G = {v:1, seed:(Math.random()*2e9)|0, money:20, dug:new Uint8Array(COLS*ROWS), mark:new Uint8Array(COLS*ROWS), lad:new Uint8Array(COLS*ROWS), robots:[],
        up:{bay:0,luck:0,market:0,lift:0,refinery:0,auto:0,scanner:0,lights:0}, log:{}, deepest:0, seen:[0], rate:0, earned:0,
        found:0, best:-1, tut:0, nextId:1, recent:[], last:Date.now(), xluck:0, forceRar:-1, oreAdd:{}};
   for(let y=0;y<4;y++) G.dug[I(SHAFT,y)]=1;
@@ -80,7 +86,7 @@ const SAVE_KEY='mine-save-v1';
 function save(){
   if(!G || window.__demo) return;
   try{
-    const o=Object.assign({},G,{dug:packBits(G.dug),mark:packBits(G.mark),last:Date.now(),
+    const o=Object.assign({},G,{dug:packBits(G.dug),mark:packBits(G.mark),lad:packBits(G.lad||[]),last:Date.now(),
       robots:G.robots.map(r=>({id:r.id,tier:r.tier,rar:r.rar,up:r.up,tx:r.tx,ty:r.ty,cargo:r.cargo,bat:r.bat,scrap:r.scrap||0}))});
     localStorage.setItem(SAVE_KEY, JSON.stringify(o));
   }catch(e){}
@@ -105,12 +111,13 @@ function load(){
   if(!raw) return false;
   try{
     const o=normalize(JSON.parse(raw)); if(o.v!==1) throw new Error('version');
-    const dug=new Uint8Array(COLS*ROWS), mark=new Uint8Array(COLS*ROWS); unpackBits(o.dug,dug); unpackBits(o.mark,mark);
-    G=Object.assign(o,{dug,mark});
+    const dug=new Uint8Array(COLS*ROWS), mark=new Uint8Array(COLS*ROWS), lad=new Uint8Array(COLS*ROWS); unpackBits(o.dug,dug); unpackBits(o.mark,mark);
+    if(typeof o.lad==='string') unpackBits(o.lad,lad); for(let i=0;i<lad.length;i++) if(!dug[i]) lad[i]=0;
+    G=Object.assign(o,{dug,mark,lad});
     genWorld(G.seed);
     for(const k in G.oreAdd) W.ore[+k]=G.oreAdd[k]; // ore placed from the admin panel
     G.robots=o.robots.map(s=>{const r=newRobot(s.tier,s.rar); G.nextId--; Object.assign(r,s);
-      if(!isDug(r.tx,r.ty)){r.tx=(r.id-1)%4;r.ty=-1;} r.x=r.tx*TILE+6; r.y=r.ty*TILE+TILE; return r;});
+      if(!isDug(r.tx,r.ty)){r.tx=(r.id-1)%4;r.ty=-1;} while(!standable(r.tx,r.ty)) r.ty++; r.x=r.tx*TILE+6; r.y=r.ty*TILE+TILE; return r;});
     G.nextId=Math.max(G.nextId||1, ...G.robots.map(r=>r.id+1));
     G.robots.forEach(r=>r.bat=Math.min(r.bat,batMax(r)));
     // marks on already-dug tiles are cleared
@@ -127,15 +134,21 @@ function load(){
 const NN=(ROWS+1)*COLS, prev=new Int32Array(NN), dist=new Int32Array(NN), Q=new Int32Array(NN);
 const ni=(x,y)=>(y+1)*COLS+x;
 const DIRS=[[1,0],[-1,0],[0,1],[0,-1]];
-function bfs(sx,sy, visit){ // visit(x,y,d,cellIndex) returns true to stop
+// gravity rules: an unsupported tile only leads down (a fall); climbing up needs the lift or a ladder.
+// climb=true is the fallback when that strands a robot: it may go anywhere and builds ladders where it has no footing.
+function bfs(sx,sy, visit, climb){ // visit(x,y,d,cellIndex) returns true to stop
   dist.fill(-1); let h=0,t=0; const s=ni(sx,sy); dist[s]=0; prev[s]=-1; Q[t++]=s;
   while(h<t){
-    const c=Q[h++], x=c%COLS, y=Math.floor(c/COLS)-1, d=dist[c];
-    if(visit(x,y,d,c)) return c;
-    for(const [dx,dy] of DIRS){const nx=x+dx, ny=y+dy; if(!isDug(nx,ny)) continue; const n=ni(nx,ny); if(dist[n]>=0) continue; dist[n]=d+1; prev[n]=c; Q[t++]=n;}
+    const c=Q[h++], x=c%COLS, y=Math.floor(c/COLS)-1, d=dist[c], st=climb||standable(x,y);
+    if(visit(x,y,d,c,st)) return c;
+    for(const [dx,dy] of DIRS){const nx=x+dx, ny=y+dy; if(!isDug(nx,ny)) continue;
+      if(!st && dy!==1) continue;
+      if(dy===-1 && !climb && !climbable(x,y)) continue;
+      const n=ni(nx,ny); if(dist[n]>=0) continue; dist[n]=d+1; prev[n]=c; Q[t++]=n;}
   }
   return -1;
 }
+function bfs2(sx,sy,visit){ const c=bfs(sx,sy,visit,false); return c>=0?c:bfs(sx,sy,visit,true); }
 function pathTo(c){const out=[]; while(c>=0&&prev[c]>=0){out.push([c%COLS,Math.floor(c/COLS)-1]); c=prev[c];} return out.reverse();}
 let DUGVER=0;
 const parkX = r => (r.id-1)%4;
@@ -146,7 +159,7 @@ function pathCost(r,sx,sy,path){ let t=0,px=sx,py=sy; for(const [x,y] of path){ 
 // seconds to get from (x,y) back to the robot's parking spot, through tunnels (cached until new tunnels appear)
 function homeCost(r,x,y){
   const k=x+','+y+','+DUGVER+','+G.up.lift+','+r.tier; if(r._hcK===k) return r._hcV;
-  const c=bfs(x,y,(bx,by)=>bx===parkX(r)&&by===-1); const v=c<0?1e9:pathCost(r,x,y,pathTo(c));
+  const c=bfs2(x,y,(bx,by)=>bx===parkX(r)&&by===-1); const v=c<0?1e9:pathCost(r,x,y,pathTo(c));
   r._hcK=k; r._hcV=v; return v;
 }
 const digTime = (r,k)=> HARD_TIME[hardAt(k)]*(W.ore[k]?1.25:1)/drillRate(r);
@@ -154,7 +167,8 @@ const RESERVE = 1.3, MARGIN = 2;
 function findJob(r,skip){
   const dig=TIERS[r.tier].dig, A=G.up.auto, range=[0,22,34,9999][A];
   let mark=null, ore=null, deep=null;
-  bfs(r.tx,r.ty,(x,y,d,c)=>{
+  const look=(x,y,d,c,st)=>{
+    if(!st) return false; // no digging while falling
     for(const [dx,dy] of DIRS){const nx=x+dx, ny=y+dy;
       if(nx<0||nx>=COLS||ny<0||ny>=ROWS) continue; const ti=I(nx,ny);
       if(G.dug[ti]||reserved.has(ti)||hardAt(ti)>dig||(skip&&skip.has(ti))) continue;
@@ -163,13 +177,15 @@ function findJob(r,skip){
       if(A>=2 && nx===SHAFT && dy===1 && (!deep || ny>deep.y)) deep={x:nx,y:ny,c,kind:'auto'};
     }
     return false;
-  });
+  };
+  bfs(r.tx,r.ty,look,false);
+  if(!mark){ const keep=[ore,deep]; ore=deep=null; bfs(r.tx,r.ty,look,true); if(!mark){ [ore,deep]=keep; if(ore||deep) bfs(r.tx,r.ty,look,false); } }
   const j=mark||ore||deep; if(!j) return null;
   j.path=pathTo(j.c); return j;
 }
 function goHome(r){
   release(r); const px=parkX(r);
-  const c=bfs(r.tx,r.ty,(x,y)=>x===px&&y===-1);
+  const c=bfs2(r.tx,r.ty,(x,y)=>x===px&&y===-1);
   r.home=true; r.job=null;
   if(c<0){ r.st='idle'; return; }
   r.path=pathTo(c);
@@ -206,15 +222,20 @@ function startDrill(r){
   if(j.x!==r.tx){ r.face=j.x>r.tx?1:-1; r.vdir=null; } else r.vdir=j.y>r.ty?'d':'u';
 }
 function jobValid(r){ const j=r.job; if(!j) return false; const k=I(j.x,j.y); return !G.dug[k] && (j.kind!=='mark'||G.mark[k]); }
-function moveSpeed(r, vertical){
+function moveSpeed(r, vertical, fall){
   let s=2.6*TIERS[r.tier].mv; if(vertical && r.tx===SHAFT) s*=1.5*(1+0.6*G.up.lift);
+  if(fall) return Math.max(s,7)*TILE; // dropping, not driving
   if(r.bat<=0 && !(vertical && r.tx===SHAFT)) s*=0.35; return s*TILE;
 }
 function stepPath(r,dt){
   if(!r.path.length){ if(r.home) arriveHome(r); else if(jobValid(r)) startDrill(r); else { release(r); r.st='idle'; r.think=0; } return; }
   const [nx,ny]=r.path[0], gx=nx*TILE+6, gy=ny*TILE+TILE, vertical=nx===r.tx;
   if(nx!==r.tx) r.face=nx>r.tx?1:-1;
-  const sp=moveSpeed(r,vertical)*dt, dx=gx-r.x, dy=gy-r.y, d=Math.hypot(dx,dy);
+  if(vertical && ny<r.ty && r.ty>=0 && !(climbable(r.tx,r.ty) && (ny<0||climbable(nx,ny)))){ // climbing where there is no ladder yet: build one
+    if(r.tx!==SHAFT){ G.lad[I(r.tx,r.ty)]=1; if(ny>=0) G.lad[I(nx,ny)]=1; DUGVER++; } }
+  if(ny>=0 && !standable(nx,ny) && !(r.path.length>1 && r.path[1][0]===nx && r.path[1][1]===ny+1)){ G.lad[I(nx,ny)]=1; DUGVER++; } // heading somewhere with no floor and not dropping on: ladder it first
+  const fall=vertical && ny>r.ty && r.ty>=0 && !standable(r.tx,r.ty) && !climbable(nx,ny);
+  const sp=moveSpeed(r,vertical,fall)*dt, dx=gx-r.x, dy=gy-r.y, d=Math.hypot(dx,dy);
   if(d<=sp){ r.x=gx; r.y=gy; r.tx=nx; r.ty=ny; r.path.shift();
     r._prog=0;
     if(!r.home && r.job && !jobValid(r)){ release(r); r.st='idle'; r.think=0; }
@@ -222,6 +243,7 @@ function stepPath(r,dt){
   else { r.x+=dx/d*sp; r.y+=dy/d*sp; }
 }
 function drillStep(r,dt){
+  if(!standable(r.tx,r.ty)){ release(r); r.st='idle'; r.think=0; return; } // floor dug away under it
   if(!jobValid(r)){ release(r); r.st='idle'; r.think=0; return; }
   const k=I(r.job.x,r.job.y), t=HARD_TIME[hardAt(k)]*(W.ore[k]?1.25:1);
   r.prog+=dt*drillRate(r)/t; r._prog=0;
@@ -230,7 +252,9 @@ function drillStep(r,dt){
   if(r.prog>=1) completeDig(r);
 }
 function completeDig(r){
-  const {x,y}=r.job, k=I(x,y); G.dug[k]=1; G.mark[k]=0; DUGVER++; release(r);
+  const {x,y}=r.job, k=I(x,y);
+  [[x-1,y],[x+1,y]].forEach(([a,b])=>{ if(geoLad(a,b)) G.lad[I(a,b)]=1; }); // keep ladders a side tunnel would cut
+  G.dug[k]=1; G.mark[k]=0; DUGVER++; release(r);
   FX.burst(x,y,r.tier);
   const o=W.ore[k];
   if(!o) r.scrap=(r.scrap||0)+hardAt(k); // plain rock rides up as scrap: a small income floor so a player can never end up broke with nothing left to dig
@@ -246,6 +270,7 @@ function completeDig(r){
   recomputeConn();
   if(y>G.deepest){ G.deepest=y; const s=W.strat[k]; if(!G.seen.includes(s)){ G.seen.push(s); UI.zone(s); } }
   r.st='idle'; r.think=0;
+  if(!standable(r.tx,r.ty)){ r.path=[[r.tx,r.ty+1]]; r.st='move'; } // dug out its own floor: drop
 }
 function oreValue(fi,rar){ return Math.round(FINDS[fi].val*RAR[rar].m*sellMult()); }
 let rateAcc=0, rateT=0;
@@ -264,7 +289,8 @@ function robotUpdate(r,dt){
     if(!isDug(r.tx,r.ty)){ r.tx=parkX(r); r.ty=-1; } r.x=r.tx*TILE+6; r.y=r.ty*TILE+TILE; r.st='idle'; r.think=0; r._prog=0; }
   if(r.st==='idle'||r.st==='unload') r._prog=0;
   switch(r.st){
-    case 'idle': r.think-=dt; if(r.think<=0){ r.think=0.4; plan(r); } break;
+    case 'idle': if(!standable(r.tx,r.ty)){ r.path=[[r.tx,r.ty+1]]; r.st='move'; r.home=false; break; }
+      r.think-=dt; if(r.think<=0){ r.think=0.4; plan(r); } break;
     case 'move': stepPath(r,dt); break;
     case 'drill': drillStep(r,dt); break;
     case 'unload': r.timer-=dt; if(r.timer<=0){ sell(r); r.bat=batMax(r); r.st='idle'; r.think=0; } break;

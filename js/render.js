@@ -234,8 +234,9 @@ function drawTiles(cx,cy,vw,vh,T,L,D){
       ctx.drawImage(L.back[si],sx,sy,TD,TD,X,Y,TILE,TILE);
       const Lf=isDug(x-1,y), Rt=isDug(x+1,y), U=isDug(x,y-1), Dn=isDug(x,y+1);
       if(x===SHAFT) drawShaftRails(X,Y,y,u,D);
-      else if((U||Dn)&&!Lf&&!Rt) drawLadder(X,Y,y,u,D);
+      else if(((U||Dn)&&!Lf&&!Rt) || (G.lad&&G.lad[k])) drawLadder(X,Y,y,u,D);
       else if(y>=3 && !U && (Lf||Rt) && x%3===0) drawSupport(X,Y,y,u,D);
+      else if(y===0){ R_(X,Y,TILE,2,SUP_WOOD[1]); R_(X,Y,TILE,1,SUP_WOOD[3]); if(D>1){ R_(X+4,Y+u,u,2-u,SUP_WOOD[0]); R_(X+8,Y+u,u,2-u,SUP_WOOD[0]); } } // plank walkway over a hole at the surface
       if(!Dn){ R_(X,Y+TILE-1,TILE,1,STRATA[si].pal[3]); if(D>1){ for(let i=0;i<TILE;i+=u*3) if(hash2(x*97+Math.round(i*D),y,13)>0.6) R_(X+i,Y+TILE-1-u,u,u,STRATA[si].pal[2]); } } // floor rubble
       if(isLampTile(x,y)){ R_(X+4,Y,4,1,'#2a2a30'); R_(X+5,Y+1,2,1,'#ffe9a8'); if(D>1){ R_(X+4,Y+1,u,1,'#2a2a30'); R_(X+8-u,Y+1,u,1,'#2a2a30'); R_(X+5,Y+1,u,u,'#ffffff'); R_(X+4,Y+2-u,4,u,'#2a2a30'); } }
       continue;
@@ -293,7 +294,9 @@ function drawRobots(cx,cy,vw,vh,T){
   G.robots.forEach(r=>{
     if(r.x<cx-40||r.x>cx+vw+40||r.y<cy-20||r.y>cy+vh+50) return;
     const n=share.get(r.tx+','+r.ty), ox=n>1?(r._slot-(n-1)/2)*Math.min(4,8/n):0; // spread robots sharing a tile
-    if(r.tx===SHAFT && r.ty>=0 && r.st==='move'){ const x=snap(r.x)-7, y=snap(r.y)-15, C=SUP_STEEL;
+    // the lift cage holds any robot in the shaft (riding, drilling or waiting), and meets one walking in
+    const toShaft=r.st==='move'&&r.path.length&&r.path[0][0]===SHAFT&&r.path[0][1]>=0;
+    if((r.tx===SHAFT && r.ty>=0) || toShaft){ const x=SHAFT*TILE+6-7, y=snap(r.tx===SHAFT?r.y:r.path[0][1]*TILE+TILE)-15, C=SUP_STEEL;
       R_(x,y,15,1,C[3]); R_(x,y+15,15,1,C[3]); R_(x,y,1,15,C[2]); R_(x+14,y,1,15,C[2]);
       if(RV.D>1){ for(let i=2;i<14;i+=2) R_(x+i,y+1,u,14,C[1]); R_(x,y,15,u,'#d8e4f0'); bolt(x,y,u,C); bolt(x+14-u,y,u,C); bolt(x,y+15-u,u,C); bolt(x+14-u,y+15-u,u,C); R_(x+3,y+1,9,u,'#d9a520'); }
       R_(x+7,-60,1,Math.max(0,y+60),'#55555e'); if(RV.D>1) R_(x+7,-60,u,Math.max(0,y+60),'#8a8a94'); }
