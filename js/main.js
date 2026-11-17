@@ -18,6 +18,7 @@ cv.addEventListener('pointerdown',e=>{
     Input.drag={pan:true,x:e.clientX,y:e.clientY,pinch:pinchDist()}; return; }
   if( e.button===1 || e.button===2 || Input.tool==='pan'){ Input.drag={pan:true,x:e.clientX,y:e.clientY}; return; }
   const [tx,ty,wx,wy]=screenToTile(e.clientX,e.clientY);
+  if(ADMIN.picking){ Input.drag=null; ADMIN.place(tx,ty); return; }
   const r=robotAt(wx,wy); if(r){ UI.sel=r.id; if(UI.open!=='robots') UI.toggle('robots'); else UI.render(); Input.drag=null; return; }
   if(ty<0){ Input.drag={pan:true,x:e.clientX,y:e.clientY}; return; }
   const on=!(tx>=0&&tx<COLS&&G.mark[I(tx,ty)]); Input.drag={pan:false,on,last:[tx,ty],sx:e.clientX,sy:e.clientY,cy:e.clientY,hist:new Map()};
@@ -45,6 +46,8 @@ function pinchMid(){ const a=[...Input.ptrs.values()]; return [(a[0].x+a[1].x)/2
 function zoomAt(t,clientX,clientY){ const r=cv.getBoundingClientRect(); const ok=clientX==null?zoomTo(t):zoomTo(t,(clientX-r.left)/SC,(clientY-r.top)/SC); if(ok) UI.zoomLbl(); return ok; }
 addEventListener('keydown',e=>{
   if(MODE!=='game') return;
+  if(ADMIN.isTyping(e)){ if(e.key==='Escape'){ e.target.blur(); UI.close(); } return; } // typing in a field: no game keys
+  if((e.key==='l'||e.key==='L')&&!e.ctrlKey&&!e.metaKey&&!e.altKey){ e.preventDefault(); ADMIN.toggle(); return; }
   if(e.key==='Escape') UI.close();
   const s=(e.shiftKey?120:40)/ZOOM.z;
   if(e.key==='ArrowDown'||e.key==='s') cam.ty+=s; if(e.key==='ArrowUp'||e.key==='w') cam.ty-=s;
@@ -72,7 +75,7 @@ let last=performance.now(), uiT=0, saveT=0;
 function frame(now){
   const dt=Math.min(0.05,(now-last)/1000); last=now; T+=dt;
   if(MODE==='title'){ cam.ty=-Math.min(SKY*TILE,VH*0.45)+6+Math.sin(T*0.12)*(reduced?0:6); const cb=camBounds(); cam.tx=cb.x0===cb.x1?cb.x0:SHAFT*TILE+40-VW/2; }
-  simUpdate(dt); updateFX(dt); camUpdate(dt);
+  for(let i=0;i<(MODE==='game'?ADMIN.speed:1);i++) simUpdate(dt); updateFX(dt); camUpdate(dt);
   if(MODE==='game' && Input.drag && !Input.drag.pan){ const h=innerHeight, y=Input.drag.cy; if(y<h*0.1) cam.ty-=200*dt/ZOOM.z; else if(y>h*0.9) cam.ty+=200*dt/ZOOM.z; }
   render(T, MODE);
   if(wipe){ wipe.t+=dt; const q=wipe.t/wipe.m; if(q>=1) wipe=null; else {
@@ -86,7 +89,7 @@ function boot(){
   buildSheets(); resize();
   const had=load();
   if(!had) newGame();
-  recomputeConn(); UI.shown=G.money; UI.init();
+  recomputeConn(); UI.shown=G.money; UI.init(); ADMIN.init();
   if(had){
     $('#play').textContent='CONTINUE'; $('#newg').hidden=false;
     const away=Math.min(7200,(Date.now()-(G.last||Date.now()))/1000);

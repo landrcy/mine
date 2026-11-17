@@ -436,7 +436,7 @@ function render(T, mode){
   drawTiles(cx,cy,vw,vh,T,L,D);
   drawParticles(false);
   drawRobots(cx,cy,vw,vh,T);
-  drawDarkness(cx,cy,vw,vh,T);
+  if(!ADMIN.reveal) drawDarkness(cx,cy,vw,vh,T);
   ctx.setTransform(Z,0,0,Z,-cx*Z,-cy*Z);
   drawEmissive(cx,cy,vw,vh,T,L,D);
   drawParticles(true);

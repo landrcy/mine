@@ -51,7 +51,7 @@ function recomputeConn(){
 let G = null;
 const reserved = new Map();
 const isDug=(x,y)=> y===-1 ? (x>=0&&x<COLS) : (x>=0&&x<COLS&&y>=0&&y<ROWS&&G.dug[I(x,y)]===1);
-const luck = ()=> 0.1*G.up.luck;
+const luck = ()=> 0.1*G.up.luck+(G.xluck||0); // xluck = admin luck slider
 const slots = ()=> 2+G.up.bay;
 const sellMult = ()=> (1+0.12*G.up.market)*(1+0.2*G.up.refinery);
 const bestTier = ()=> G.robots.reduce((m,r)=>Math.max(m,r.tier),0);
@@ -63,7 +63,7 @@ function newRobot(tier, rar){
 function newGame(){
   G = {v:1, seed:(Math.random()*2e9)|0, money:20, dug:new Uint8Array(COLS*ROWS), mark:new Uint8Array(COLS*ROWS), robots:[],
        up:{bay:0,luck:0,market:0,lift:0,refinery:0,auto:0,scanner:0,lights:0}, log:{}, deepest:0, seen:[0], rate:0, earned:0,
-       found:0, best:-1, tut:0, nextId:1, recent:[], last:Date.now()};
+       found:0, best:-1, tut:0, nextId:1, recent:[], last:Date.now(), xluck:0, forceRar:-1, oreAdd:{}};
   for(let y=0;y<4;y++) G.dug[I(SHAFT,y)]=1;
   genWorld(G.seed);
   const r=newRobot(0,0); r.bat=batMax(r); G.robots.push(r);
@@ -81,7 +81,7 @@ function save(){
   if(!G || window.__demo) return;
   try{
     const o=Object.assign({},G,{dug:packBits(G.dug),mark:packBits(G.mark),last:Date.now(),
-      robots:G.robots.map(r=>({id:r.id,tier:r.tier,rar:r.rar,up:r.up,tx:r.tx,ty:r.ty,cargo:r.cargo,bat:r.bat}))});
+      robots:G.robots.map(r=>({id:r.id,tier:r.tier,rar:r.rar,up:r.up,tx:r.tx,ty:r.ty,cargo:r.cargo,bat:r.bat,scrap:r.scrap||0}))});
     localStorage.setItem(SAVE_KEY, JSON.stringify(o));
   }catch(e){}
 }
@@ -95,6 +95,8 @@ function normalize(o){
   o.robots.forEach(r=>{ r.tier=num(r.tier,0,0,TIERS.length-1)|0; r.rar=num(r.rar,0,0,RAR.length-1)|0; r.up=Object.assign({drill:0,hopper:0,battery:0,lamp:0},r.up||{});
     for(const k in RUPG) r.up[k]=num(r.up[k],0,0,RUPG[k].max)|0; r.cargo=(Array.isArray(r.cargo)?r.cargo:[]).filter(c=>Array.isArray(c)&&FINDS[c[0]]&&RAR[c[1]]); r.bat=num(r.bat,45,0); r.scrap=num(r.scrap,0,0); r.tx=num(r.tx,0)|0; r.ty=num(r.ty,-1)|0; });
   if(!o.robots.length) o.robots=[{id:1,tier:0,rar:0,up:{drill:0,hopper:0,battery:0,lamp:0},tx:0,ty:-1,cargo:[],bat:45}];
+  o.xluck=num(o.xluck,0,0,5); o.forceRar=num(o.forceRar,-1,-1,RAR.length-1)|0;
+  const oa={}; if(o.oreAdd&&typeof o.oreAdd==='object') for(const k in o.oreAdd){ const i=+k, v=+o.oreAdd[k]; if(Number.isInteger(i)&&i>=0&&i<COLS*ROWS&&Number.isInteger(v)&&v>=1&&v<=FINDS.length) oa[i]=v; } o.oreAdd=oa;
   o.sv=2; return o;
 }
 function load(){
@@ -106,6 +108,7 @@ function load(){
     const dug=new Uint8Array(COLS*ROWS), mark=new Uint8Array(COLS*ROWS); unpackBits(o.dug,dug); unpackBits(o.mark,mark);
     G=Object.assign(o,{dug,mark});
     genWorld(G.seed);
+    for(const k in G.oreAdd) W.ore[+k]=G.oreAdd[k]; // ore placed from the admin panel
     G.robots=o.robots.map(s=>{const r=newRobot(s.tier,s.rar); G.nextId--; Object.assign(r,s);
       if(!isDug(r.tx,r.ty)){r.tx=(r.id-1)%4;r.ty=-1;} r.x=r.tx*TILE+6; r.y=r.ty*TILE+TILE; return r;});
     G.nextId=Math.max(G.nextId||1, ...G.robots.map(r=>r.id+1));
@@ -232,7 +235,8 @@ function completeDig(r){
   const o=W.ore[k];
   if(!o) r.scrap=(r.scrap||0)+hardAt(k); // plain rock rides up as scrap: a small income floor so a player can never end up broke with nothing left to dig
   if(o){
-    const fi=o-1, rl=luck()+(W.rich[k]?0.5:0), rar=rollRarity(y, rl, Math.random);
+    const fi=o-1, rl=luck()+(W.rich[k]?0.5:0); let rar=rollRarity(y, rl, Math.random);
+    if(G.forceRar>=0){ rar=G.forceRar; G.forceRar=-1; } // admin: forced next find
     r.cargo.push([fi,rar]);
     const L=G.log[FINDS[fi].id]||(G.log[FINDS[fi].id]=[0,0,0,0,0,0,0]); const isNew=L[rar]===0; L[rar]++;
     G.found++; if(rar>G.best) G.best=rar;

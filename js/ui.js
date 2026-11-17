@@ -24,7 +24,7 @@ const UI = {
     UI.render();
   },
   close(){ UI.open=null; document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on')); document.querySelectorAll('[data-panel]').forEach(b=>b.classList.remove('act')); },
-  render(){ if(!UI.open) return; ({robots:UI.rRobots,base:UI.rBase,log:UI.rLog,odds:UI.rOdds})[UI.open](); UI.tick(true); },
+  render(){ if(!UI.open) return; ({robots:UI.rRobots,base:UI.rBase,log:UI.rLog,odds:UI.rOdds,admin:ADMIN.render})[UI.open](); UI.tick(true); },
   closeBtn(n){ const hd=document.querySelector('#p-'+n+' header'); if(hd&&!hd.querySelector('.x')) hd.insertAdjacentHTML('beforeend','<button class="x" data-act="close" aria-label="Close panel">&times;</button>'); },
   rRobots(){
     const sel=G.robots.find(r=>r.id===UI.sel)||G.robots[0]; UI.sel=sel.id; const n=G.robots.length, full=n>=slots(), c=robotCost(n+1);
