@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>MINE</title>
+<meta name="description" content="MINE: send your robots down to dig.">
+<meta name="theme-color" content="#07060a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 8 8%22 shape-rendering=%22crispEdges%22%3E%3Crect width=%228%22 height=%228%22 fill=%22%2307060a%22/%3E%3Crect x=%221%22 y=%222%22 width=%226%22 height=%224%22 fill=%22%23a8653a%22/%3E%3Crect x=%225%22 y=%223%22 width=%223%22 height=%222%22 fill=%22%23ffd23a%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css?v=1">
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="hud">
+  <div class="stat money"><small>CASH</small><b id="money">$0</b></div>
+  <div class="stat"><small>DEEPEST</small><b id="depth">0m</b></div>
+  <div class="stat"><small>ROBOTS</small><b id="bots">1/2</b></div>
+  <div class="stat"><small>LUCK</small><b id="luck">+0.0</b></div>
+  <div class="stat layer"><small>VIEWING</small><b id="layer">SURFACE</b></div>
+</div>
+
+<nav id="dock">
+  <button id="tool" title="Dig or pan (space)">DIG</button>
+  <button id="btop" title="Jump to surface">&#9650;</button>
+  <button id="bdeep" title="Jump to deepest point">&#9660;</button>
+  <span class="sep"></span>
+  <button data-panel="robots">ROBOTS</button>
+  <button data-panel="base">BASE</button>
+  <button data-panel="log">LOG</button>
+  <button data-panel="odds">ODDS</button>
+</nav>
+
+<div id="panels">
+  <section class="panel" id="p-robots"></section>
+  <section class="panel" id="p-base"></section>
+  <section class="panel" id="p-log"></section>
+  <section class="panel" id="p-odds"></section>
+</div>
+
+<div id="banner"></div>
+<div id="tier"></div>
+<div id="zone"></div>
+<div id="toast"></div>
+
+<div id="title">
+  <p class="tag">send the machines down.</p>
+  <div class="btns"><button id="play">DESCEND</button><button id="newg" hidden>NEW GAME</button></div>
+</div>
+
+<div id="howto"><div class="card">
+  <h2>HOW TO PLAY</h2>
+  <ol>
+    <li><b>Tap or drag</b> across rock to mark tunnels. Tap a mark again to clear it.</li>
+    <li>Your robots dig the marks, fill their hoppers with ore, then haul it up the shaft and sell it.</li>
+    <li>Every find rolls a <b class="rr">rarity</b>. Deeper rock rolls better.</li>
+    <li><b>ROBOTS</b> upgrades one machine (and transforms it). <b>BASE</b> upgrades everything.</li>
+    <li>Look around: <b>PAN</b> tool, two fingers, right-drag, or the mouse wheel.</li>
+  </ol>
+  <button id="gotit">START DIGGING</button>
+</div></div>
+
+<script src="js/data.js?v=1"></script>
+<script src="js/art.js?v=1"></script>
+<script src="js/sim.js?v=1"></script>
+<script src="js/render.js?v=1"></script>
+<script src="js/ui.js?v=1"></script>
+<script src="js/main.js?v=1"></script>
+</body>
+</html>
