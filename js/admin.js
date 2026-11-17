@@ -20,6 +20,7 @@ const ADMIN = {
     <div class="adm-r"><select id="adm-rt">${ADMIN.opt(TN,r.tier)}</select><select id="adm-rr">${ADMIN.opt(RN,r.rar)}</select></div>
     <div class="adm-g">${Object.keys(RUPG).map(k=>`<label>${RUPG[k].n}<input type="number" min="0" max="${RUPG[k].max}" value="${r.up[k]}" data-ru="${k}"></label>`).join('')}</div>
     <div class="adm-r"><button class="buy wide" data-adm="setbot">APPLY TO #${r.id}</button></div>
+    <div class="adm-r"><button class="buy wide" data-adm="maxbots">MAX ALL ROBOTS</button></div>
     <div class="adm-r"><button class="buy wide" data-adm="maxbase">MAX ALL BASE UPGRADES</button></div>
     <h3>CAMERA</h3>
     <div class="adm-r"><input id="adm-depth" type="number" min="0" max="${(ROWS-1)*M_PER_ROW}" step="2" placeholder="depth m"><button class="buy" data-adm="tp">GO</button></div>
@@ -54,6 +55,8 @@ const ADMIN = {
       if(t!==r.tier){ r.tfx={t:0,d:reduced?0.7:1.8,from:r.tier}; r.tier=t; }
       r.rar=rr; document.querySelectorAll('#p-admin [data-ru]').forEach(i=>{ const k=i.dataset.ru, v=+i.value; r.up[k]=isFinite(v)?Math.max(0,Math.min(RUPG[k].max,Math.round(v))):r.up[k]; });
       r.bat=batMax(r); if(r.job&&!jobValid(r)){ release(r); r.st='idle'; } return ADMIN.done(`Robot #${r.id} updated.`); }
+    if(a==='maxbots'){ const top=TIERS.length-1; G.robots.forEach(q=>{ if(q.tier!==top){ q.tfx={t:0,d:reduced?0.7:1.8,from:q.tier}; q.tier=top; } for(const k in RUPG) q.up[k]=RUPG[k].max; q.bat=batMax(q); });
+      return ADMIN.done(`All ${G.robots.length} robots maxed: ${TIERS[top].n}.`); }
     if(a==='maxbase'){ for(const k in GUPG) G.up[k]=GUPG[k].max; return ADMIN.done('All base upgrades maxed.'); }
     if(a==='tp'){ const m=ADMIN.int('#adm-depth',0,(ROWS-1)*M_PER_ROW); if(m===null) return; const row=Math.floor(m/M_PER_ROW); cam.ty=row*TILE-viewH()/2; cam.tx=SHAFT*TILE-viewW()/2; if(reduced) clampCam(true); return; }
     if(a==='reveal'){ ADMIN.reveal=!ADMIN.reveal; return ADMIN.render(); }
